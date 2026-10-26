@@ -219,7 +219,7 @@ export class Ui {
     const toggle = (setting: string, label: string) =>
       `<div class="setting-row"><span>${label}</span><button data-nav class="toggle" data-setting="${setting}" aria-pressed="false"><i></i><span>Off</span></button></div>`
     return /* html */ `
-<section class="screen boot-screen is-active" data-screen="boot"><img class="boot-favicon" src="/manus-storage/game/sha256/c451475e1d9aac2ba50f09cbdaa79069ca157e72be4e827969d9b143f557d76d.png" alt=""><div class="boot-wordmark">SEVEN NOTES</div><div class="boot-bar"><i></i></div><small>THE CITY IS LISTENING</small></section>
+<section class="screen boot-screen is-active" data-screen="boot"><img class="boot-favicon" src="./favicon.svg" alt=""><div class="boot-wordmark">SEVEN NOTES</div><div class="boot-bar"><i></i></div><small>THE CITY IS LISTENING</small></section>
 <section class="screen title-screen" data-screen="title">
   <div class="title-wash"></div><div class="title-copy">
     <div class="eyebrow">A STORY OF SA</div><div class="wordmark"><span class="seven-strokes" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><h1>SEVEN NOTES<br><em>FADING</em></h1></div>

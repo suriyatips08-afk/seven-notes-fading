@@ -1,1 +1,7 @@
-<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 1 21 12 12 23 3 12Z' fill='#ffd35c' stroke='#1b1838' stroke-width='2'/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Seven Notes">
+  <rect width="64" height="64" rx="14" fill="#221f1c"/>
+  <path d="M31 8h2v40h-2z" fill="#d4bd8a"/>
+  <path d="M28 11h8v3h-8zM27 44h10v4H27z" fill="#b49a6b"/>
+  <path d="M32 39c-8 0-14 5-14 10 0 4 6 7 14 7s14-3 14-7c0-5-6-10-14-10Z" fill="#b49a6b" stroke="#e7decb" stroke-width="2"/>
+  <path d="M24 11v34m8-34v34m8-34v34" stroke="#e7decb" stroke-width="1" opacity=".75"/>
+</svg>
