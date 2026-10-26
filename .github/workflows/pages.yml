@@ -35,6 +35,8 @@ jobs:
         run: pnpm test
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Build game
         run: pnpm manus:build-source
         env:
