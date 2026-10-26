@@ -34,9 +34,6 @@ export const DEFAULT_CONFIG = {
     maxFall: -40,
     coyoteTime: 0.12,
     jumpBuffer: 0.14,
-    dashSpeed: 22,
-    dashTime: 0.16,
-    dashCooldown: 0.9,
     turnSpeed: 14,
   },
   camera: {

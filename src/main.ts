@@ -1,6 +1,5 @@
 import './styles/main.css'
 import { Audio } from './engine/audio'
-import { I18n, resolveLocale } from './engine/i18n'
 import { Input } from './engine/input'
 import { GameLoop } from './engine/loop'
 import { SAVE_KEY, SaveStore, type SaveData } from './engine/save'
@@ -12,27 +11,30 @@ async function boot(): Promise<void> {
   const canvas = document.querySelector<HTMLCanvasElement>('#game')!
   const firstRun = safeGet(SAVE_KEY) === null
   const save = new SaveStore()
-
-  const i18n = new I18n(resolveLocale(save.data.locale, navigator.languages))
+  // This prototype ships one game-content language; saved/browser language preferences do not switch it.
+  document.documentElement.lang = 'en'
   const input = new Input(canvas)
   const audio = new Audio()
   let game: Game | undefined
+  let loop: GameLoop | undefined
   let lockLostAt = 0
 
-  const applySettings = (d: SaveData) => {
-    input.sensitivity = d.sensitivity
-    input.invertY = d.invertY
-    audio.setVolumes(d.musicVolume, d.sfxVolume, d.muted)
-    if (game) game.reducedMotion = d.reducedMotion
+  const applySettings = (data: SaveData) => {
+    input.sensitivity = data.sensitivity
+    input.invertY = data.invertY
+    audio.setMasterVolume(data.masterVolume)
+    audio.setVolumes(data.musicVolume, data.sfxVolume, data.muted)
+    if (game) game.reducedMotion = data.reducedMotion
   }
 
-  const startRun = (tutorial: boolean) => {
+  const startRun = () => {
     if (!game) return
     audio.unlock()
     audio.startMusic()
-    game.start(tutorial)
+    audio.setAtmosphere(0)
+    game.start()
     ui.show('hud')
-    loop.resetAccumulator()
+    loop?.resetAccumulator()
     input.lockPointer()
   }
   const pause = () => {
@@ -45,13 +47,13 @@ async function boot(): Promise<void> {
     if (game?.mode !== 'paused') return
     game.resume()
     ui.show('hud')
-    loop.resetAccumulator()
+    loop?.resetAccumulator()
     input.lockPointer()
   }
 
-  const ui = new Ui(i18n, save, audio, input, {
-    play: () => startRun(!save.data.tutorialDone),
-    restart: () => startRun(false),
+  const ui = new Ui(save, audio, input, {
+    play: startRun,
+    restart: startRun,
     resume,
     quit: () => {
       game?.toTitle()
@@ -62,39 +64,39 @@ async function boot(): Promise<void> {
       const qualityChanged = patch.quality !== undefined && patch.quality !== save.data.quality
       save.update(patch)
       applySettings(save.data)
-      if (patch.locale) i18n.set(patch.locale)
       if (qualityChanged) game?.setQuality(save.data.quality)
     },
   })
   ui.show('boot')
   applySettings(save.data)
 
-  // Boot: the UI above is already on screen; three.js, Rapier (WASM) and the game load as a
-  // separate chunk behind the progress bar. Preload models/textures here too (engine/assets.ts).
-  let loaded = 0
-  const track = <T>(p: Promise<T>): Promise<T> => p.then(v => (ui.setBootProgress(0.1 + (++loaded / 4) * 0.9), v))
-  ui.setBootProgress(0.1)
+  const track = <T>(promise: Promise<T>, index: { value: number }) => promise.then(result => {
+    index.value += 1
+    ui.setBootProgress(0.12 + (index.value / 4) * 0.88)
+    return result
+  })
+  const loaded = { value: 0 }
   const [{ Game }, { Renderer, suggestQuality }, physics] = await Promise.all([
-    track(import('./game/game')),
-    track(import('./engine/renderer')),
-    track(import('./engine/physics')),
-    track(document.fonts.ready),
+    track(import('./game/game'), loaded),
+    track(import('./engine/renderer'), loaded),
+    track(import('./engine/physics'), loaded),
+    track(document.fonts.ready.then(() => undefined), loaded),
   ])
   await physics.initPhysics()
   if (firstRun) {
     save.update({ quality: suggestQuality() })
     ui.refreshSettings()
   }
-
   const renderer = new Renderer(canvas, save.data.quality)
   game = new Game(renderer, input, audio, {
-    popup: (text, at, kind) => ui.popup(text, at, kind),
-    hurt: () => ui.hurt(),
-    hint: hint => ui.hint(hint),
-    tutorialDone: () => save.update({ tutorialDone: true }),
-    end: run => {
+    story: text => ui.showStory(text),
+    objective: text => ui.setObjective(text),
+    interaction: text => ui.setInteraction(text),
+    borrowed: note => ui.setBorrowed(note),
+    puzzle: (progress, noise, open) => ui.setPuzzle(progress, noise, open),
+    ending: () => {
       input.unlockPointer()
-      window.setTimeout(() => ui.showResults(run), run.phase === 'won' ? 1400 : 900)
+      ui.showEnding()
     },
   })
   game.reducedMotion = save.data.reducedMotion
@@ -104,55 +106,46 @@ async function boot(): Promise<void> {
     ])
     await registerGameTuning(tuning)
   }
-  const g = game
-
-  const loop = new GameLoop({
+  const currentGame = game
+  loop = new GameLoop({
     beforeFrame: frameSeconds => input.update(frameSeconds),
-    step: dt => g.step(dt),
+    step: dt => currentGame.step(dt),
     render: (alpha, frameSeconds) => {
       if (input.consume('pause') && performance.now() - lockLostAt > 300) {
-        if (g.mode === 'playing') pause()
-        else if (g.mode === 'paused' && ui.screen === 'pause') resume()
+        if (currentGame.mode === 'playing') pause()
+        else if (currentGame.mode === 'paused' && ui.screen === 'pause') resume()
       }
       ui.frame(frameSeconds)
-      loop.paused = g.mode === 'paused'
-      g.render(alpha, frameSeconds)
-      if (g.mode === 'playing' || g.mode === 'ended') ui.updateHud(g.run, g.compass())
+      loop!.paused = currentGame.mode === 'paused'
+      currentGame.render(alpha, frameSeconds)
     },
   })
   loop.start()
 
   document.addEventListener('pointerlockchange', () => {
-    // Browsers release pointer lock on Escape without delivering the key: treat that as pause.
-    if (!document.pointerLockElement && g.mode === 'playing' && input.method === 'keyboard') {
+    if (!document.pointerLockElement && currentGame.mode === 'playing' && input.method === 'keyboard') {
       lockLostAt = performance.now()
       pause()
     }
   })
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) pause()
-  })
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause() })
   window.addEventListener('game:pause', pause)
-  canvas.addEventListener('click', () => {
-    if (g.mode === 'playing') input.lockPointer()
-  })
-  new TouchControls(document.getElementById('ui')!, input, () => g.mode === 'playing')
+  canvas.addEventListener('click', () => { if (currentGame.mode === 'playing') input.lockPointer() })
+  new TouchControls(document.getElementById('ui')!, input, () => currentGame.mode === 'playing')
 
   window.setTimeout(() => ui.show('title'), 250)
-  // Debug/test hook (read-only use): smoke tests inspect run state through it.
-  ;(window as unknown as { __game: unknown }).__game = { game: g, ui, input, save }
+  ;(window as unknown as { __game: unknown }).__game = { game: currentGame, ui, input, save }
 }
 
 function safeGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key)
-  } catch {
-    return null
-  }
+  try { return localStorage.getItem(key) } catch { return null }
 }
 
-boot().catch(err => {
-  console.error(err)
+boot().catch(error => {
+  console.error(error)
   const el = document.getElementById('ui')
-  if (el) el.innerHTML = `<div class="fatal">Failed to start: ${String((err as Error)?.message ?? err).replace(/[<>&]/g, '')}</div>`
+  if (el) {
+    el.innerHTML = `<div class="fatal"><div><p>Failed to start: ${String((error as Error)?.message ?? error).replace(/[<>&]/g, '')}</p><button class="retry-button">Retry</button></div></div>`
+    el.querySelector('button.retry-button')?.addEventListener('click', () => location.reload())
+  }
 })

@@ -51,11 +51,11 @@ describe('controller input', () => {
     })
   }
 
-  it('recognizes each physical dash press even when another dash binding is held', () => {
-    const p = pads[0]!
-    button(p, 5, true); input.update(); expect(input.consume('dash')).toBe(true)
-    button(p, 2, true); input.update(); expect(input.consume('dash')).toBe(true)
-    input.update(); expect(input.consume('dash')).toBe(false); expect(input.held('dash')).toBe(true)
+  it('maps the narrative Rest and Interact keyboard actions', () => {
+    key('keydown', 'KeyQ'); key('keydown', 'KeyE'); input.update()
+    expect(input.consume('rest')).toBe(true)
+    expect(input.consume('interact')).toBe(true)
+    key('keyup', 'KeyQ'); key('keyup', 'KeyE')
   })
   it('clears previous pad buttons after disconnect so reconnect presses work', () => {
     button(pads[0]!, 0, true); input.update(); expect(input.consume('confirm')).toBe(true)

@@ -5,12 +5,12 @@ import { tuning } from '../src/game/tuning'
 import { initPhysics, Physics } from '../src/engine/physics'
 import { Player, type PlayerIntent } from '../src/game/player'
 import { FollowCamera } from '../src/game/camera'
-import { createRun } from '../src/game/rules'
 
 const defaults = Object.fromEntries(tuning.controls.map(control => [control.id, control.default]))
 afterEach(() => {
   tuning.apply(defaults)
-  for (const boundary of ['jump', 'dash', 'run'] as const) tuning.activate(boundary)
+  tuning.activate('jump')
+  tuning.activate('run')
 })
 
 describe('Three.js tuning', () => {
@@ -21,30 +21,29 @@ describe('Three.js tuning', () => {
       expect(() => tuning.apply(patch)).toThrow()
       expect(tuning.read()).toEqual(before)
     }
-    tuning.apply({ 'player.walkSpeed': 12, 'player.sprintSpeed': 14 })
-    expect(CONFIG.player.walkSpeed).toBe(12)
-    expect(CONFIG.player.sprintSpeed).toBe(14)
+    tuning.apply({ 'player.walkSpeed': 9, 'player.sprintSpeed': 12 })
+    expect(CONFIG.player.walkSpeed).toBe(9)
+    expect(CONFIG.player.sprintSpeed).toBe(12)
     expect(DEFAULT_CONFIG.player.walkSpeed).toBe(7)
-    const applied = tuning.read(); tuning.apply({ 'player.walkSpeed': 12 }); expect(tuning.read()).toEqual(applied)
+    const applied = tuning.read(); tuning.apply({ 'player.walkSpeed': 9 }); expect(tuning.read()).toEqual(applied)
   })
 
-  it('keeps next-action and next-run values pending until their own boundary', () => {
-    tuning.apply({ 'player.jumpSpeed': 14, 'player.dashSpeed': 28, 'run.lives': 5 })
+  it('keeps jump strength pending until the next jump boundary', () => {
+    tuning.apply({ 'player.jumpSpeed': 14 })
     expect(CONFIG.player.jumpSpeed).toBe(DEFAULT_CONFIG.player.jumpSpeed)
-    expect(createRun(1).lives).toBe(3)
     tuning.activate('jump')
     expect(CONFIG.player.jumpSpeed).toBe(14)
-    expect(CONFIG.player.dashSpeed).toBe(DEFAULT_CONFIG.player.dashSpeed)
-    expect(tuning.read().requested['run.lives']).toBe(5)
-    tuning.activate('run'); expect(createRun(1).lives).toBe(5)
-    expect(CONFIG.player.dashSpeed).toBe(DEFAULT_CONFIG.player.dashSpeed)
+    tuning.apply({ 'player.jumpSpeed': 16 })
+    expect(tuning.read().active['player.jumpSpeed']).toBe(14)
+    tuning.activate('jump')
+    expect(CONFIG.player.jumpSpeed).toBe(16)
   })
 
-  it('changes real player movement, the next jump and next dash without replacing physics', async () => {
+  it('changes real movement and jumping without replacing the Rapier character controller', async () => {
     await initPhysics()
     const physics = new Physics()
     const player = new Player(physics, new THREE.Vector3(0, 5, 0), [])
-    const intent: PlayerIntent = { moveX: 1, moveY: 0, sprint: false, jumpPressed: false, jumpHeld: true, dashPressed: false }
+    const intent: PlayerIntent = { moveX: 1, moveY: 0, sprint: false, jumpPressed: false, jumpHeld: true }
     try {
       player.grounded = true; player.step(1 / 60, intent, 0, [])
       const oldSpeed = player.velocity.x
@@ -56,17 +55,6 @@ describe('Three.js tuning', () => {
       tuning.apply({ 'player.jumpSpeed': 14 })
       player.step(1 / 60, { ...intent, moveX: 0, jumpPressed: true }, 0, [])
       expect(player.velocity.y).toBeCloseTo(14 + CONFIG.player.gravity / 60)
-      tuning.apply({ 'player.jumpSpeed': 16 })
-      player.step(1 / 60, { ...intent, moveX: 0 }, 0, [])
-      expect(tuning.read().active['player.jumpSpeed']).toBe(14)
-      expect(player.velocity.y).toBeLessThan(14)
-      tuning.apply({ 'player.dashSpeed': 28, 'player.dashTime': 0.2 })
-      player.step(1 / 60, { ...intent, dashPressed: true }, 0, [])
-      expect(player.velocity.x).toBeCloseTo(28)
-      tuning.apply({ 'player.dashSpeed': 30 })
-      player.step(1 / 60, intent, 0, [])
-      expect(player.velocity.x).toBeCloseTo(28)
-      expect(tuning.read().active['player.dashSpeed']).toBe(28)
     } finally { physics.dispose() }
   })
 
@@ -86,11 +74,10 @@ describe('Three.js tuning', () => {
   })
 })
 
-
-describe('ranked eligibility', () => {
-  it('ignores cosmetics and unapplied next-run values, latches live gameplay until a clean new run', () => {
+describe('Tweak state', () => {
+  it('latches gameplay changes until a fresh session, while camera settings remain cosmetic', () => {
     tuning.activate('run')
-    tuning.apply({ 'camera.fov': 90, 'run.lives': 5 })
+    tuning.apply({ 'camera.fov': 90 })
     expect(tuning.unranked).toBe(false)
     tuning.apply({ 'player.walkSpeed': 8 })
     expect(tuning.unranked).toBe(true)
@@ -100,7 +87,7 @@ describe('ranked eligibility', () => {
     expect(tuning.unranked).toBe(false)
   })
 
-  it('marks next-action gameplay only when activated and cannot erase an affected run with Reset', () => {
+  it('latches only when a pending gameplay setting is activated', () => {
     tuning.activate('run')
     tuning.apply({ 'player.jumpSpeed': 14 })
     expect(tuning.unranked).toBe(false)
@@ -111,8 +98,5 @@ describe('ranked eligibility', () => {
     expect(tuning.unranked).toBe(true)
     tuning.activate('run')
     expect(tuning.unranked).toBe(false)
-    tuning.apply({ 'run.lives': 5 })
-    tuning.activate('run')
-    expect(tuning.unranked).toBe(true)
   })
 })

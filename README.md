@@ -1,95 +1,62 @@
-# game-3d starter (three.js + Rapier)
+# Seven Notes: Fading
 
-A complete, small 3D game — **Sky Cores**: run, jump and dash across floating islands to collect
-every energy core before the clock runs out, avoiding patrol drones. It exists to be *changed*:
-the engine layer is fixed scaffolding, the game layer is the part you rewrite.
+A playable browser prototype of the opening of a quiet dark-fantasy exploration game. Walk through a compact Sa, borrow the mender’s Sa note, settle a resonance latch without forcing it, and reach the Evening Minute as the city loses sound.
+
+## Engine and honest scope
+
+This initialized project is **Three.js + Rapier + TypeScript**, delivered as a Vite web game. The requested Unreal Engine 5 project and Windows package could not be created in this environment; this is not an Unreal `.uproject`, and it does not contain Unreal Blueprints/C++, a Windows build, or verified native Unreal assets. Moving the prototype into UE5 requires a local Unreal project and implementation pass.
+
+The playable slice is compact, not a six-kilometre city. Hollow, residents, buildings, strings, instrument, skyline and civic landmarks use procedural placeholder geometry. Hollow is a temporary procedural human-style adolescent silhouette, not final character art. It includes one borrowed note (Sa), one complete strain-and-Rest puzzle, three visually represented districts, an Evening Minute/Fading passage, and a short hook that preserves the hidden family history. It does not include the full game, all seven note tribes, finished dialogue, the twin/mother reveal, combat, multiplayer or a recorded soundtrack.
+
+## Run it
 
 ```bash
 pnpm install
-pnpm dev      # http://localhost:5173
-pnpm build    # typecheck + production build + JS/font budgets + total-size report
-pnpm test     # unit tests (rules, save, i18n, level)
-pnpm smoke    # after build: headless browser playthrough + screenshots in shots/
+pnpm dev       # Vite development server; default http://localhost:5173
+pnpm typecheck # TypeScript diagnostics
+pnpm test      # Vitest unit tests
+pnpm build     # managed-asset restore, sharing metadata, typecheck and production build
+pnpm smoke     # headless browser playthrough; screenshots go to shots/
 ```
 
-## Layout
-
-| Path | Role | Change it? |
-| --- | --- | --- |
-| `src/engine/loop.ts` | Fixed 60 Hz simulation + interpolated rendering | Rarely |
-| `src/engine/input.ts` | Keyboard/mouse, gamepad, touch → one action state | Add actions here |
-| `src/engine/physics.ts` | Rapier world, collider helpers, render interpolation | Rarely |
-| `src/engine/renderer.ts` | WebGL renderer, quality presets, bloom | Rarely |
-| `src/engine/audio.ts` | Music/SFX buses, synthesized SFX, `load()` for files | Add sounds |
-| `src/engine/save.ts` | Versioned localStorage save + leaderboard | Add fields + parsing |
-| `src/engine/i18n.ts` | en / zh-CN, browser detection, saved choice wins | Rarely |
-| `src/engine/assets.ts` | Cached GLTF/texture loading with progress | Use it for models |
-| `src/game/config.ts` | Source defaults and active gameplay configuration | Yes |
-| `src/game/tuning.ts` | Tweak catalog, atomic validation and activation boundaries | Yes |
-| `src/game/rules.ts` | Pure score/lives/clock/win rules (unit tested) | Yes |
-| `src/game/world.ts` | Level layout, sky, lights, islands, stones, lifts | Yes |
-| `src/game/player.ts` | Character controller + game feel + procedural model | Yes |
-| `src/game/*.ts` | Camera, cores, drones, particles, scene orchestration | Yes |
-| `src/ui/`, `src/styles/main.css` | HTML/CSS title, HUD, pause, settings, results | Yes |
-| `src/i18n/*.json` | All player-facing text (both files, same keys) | Yes |
-
-## Rules for changes
-
-- **Simulation in `step()`, visuals in `render()`/`animate()`.** Gameplay state only changes in
-  fixed steps; read presses there with `input.consume(action)`, never `pressed()`.
-- **Rules stay pure.** Scoring, win/lose and progression go in `rules.ts` with tests; scene code
-  reports events and reads state.
-- **Every visible string is an i18n key** in both `en.json` and `zh-CN.json` (a test enforces
-  matching keys and placeholders). English and Chinese use the bundled Manus CC0 fonts in `public/fonts/`;
-  if you add new Chinese text, check it renders (missing glyphs fall back to system fonts).
-- **UI is HTML/CSS**, not canvas. Keep the game look: display font, outlined text, hard offset
-  shadows, skewed buttons, notched panels. Menus must stay keyboard/gamepad navigable
-  (`data-nav` on focusable controls).
-- **Colliders come from the helpers** in `physics.ts` with the same sizes as the meshes.
-- Keep `npm run build` within the JS/font budgets (`scripts/check-size.mjs`) and `npm run smoke` green.
-  Total game asset size is reported without a hard limit.
+The smoke test needs Playwright and a local Chromium executable. The built favicon is registered at `assets/share/favicon.png`; the title and short description are in `game-sharing.json`. This quick prototype has no promotional OG cover. Sharing metadata is prepared for builds, but the game has **not** been publicly published.
 
 ## Controls
 
-Keyboard/mouse: WASD move, mouse look (click to capture), Space jump (hold = higher), Shift
-sprint, F or left click dash, Esc pause. Gamepad: left stick, right stick, A jump, X/RB dash,
-LB sprint, Start pause. Touch: left-side stick, right-side drag to look, JUMP / DASH buttons.
+- **Keyboard:** WASD to walk, mouse to look (click the game to capture the pointer), Space to jump, Shift to run, E to interact, Q to Rest, Esc or P to pause.
+- **Gamepad:** left stick to walk, right stick to look, A to jump, LB to run, X to interact, B to Rest/back, Start to pause.
+- **Touch:** left virtual stick to move, drag to look, and the on-screen Jump, Listen/Interact and Rest buttons.
 
-## Credits
+The Settings menu includes master volume, ambience and interaction levels, mute, camera sensitivity/inversion, reduced motion and graphics quality.
 
-Fonts: ManusCC0 (regular, medium, bold) and ManusCC0 Sans CJK SC — CC0 1.0.
-The bundled Chinese font preserves its 6,547-codepoint repertoire; no font download is required.
-See `public/fonts/ManusCC0-LICENSE.txt`.
-Libraries: three.js (MIT), Rapier (Apache-2.0).
+## Playable opening
 
-## Preview Tweak
+The scene starts on Hollow’s sixteenth birthday in the Strung Districts. A nearby mender’s string lends Sa; the Ring Street latch lifts through repeated compatible resonance but becomes visibly strained if forced. Q/Rest stops the sound and recovers the mechanism. Opening the route leads past the central four-string instrument into the seated Quiet Quarter. The Evening Minute reduces the world toward silence; control returns with an objective to inspect the broken trace. The secret of Hollow, his mother and his twin sister is intentionally not disclosed in this slice.
 
-`src/game/tuning.ts` is this game's parameter manager. The Addon panel reads its
-catalog; `config.ts` owns source defaults and the active configuration used by gameplay.
-When adapting the game, keep only controls with actual gameplay consumers, and preserve
-stable IDs for unchanged parameters. Define ranges, units and the correct activation
-boundary. Register through `scripts/manus-tuning/adapter.js` only under `import.meta.env.DEV`.
-Keep the Vite plugin and `scripts/__manus__/` helpers intact; production builds exclude
-the browser adapter and never inject the bridge.
+All procedural tones, including the low drone, are placeholders. Sound should be treated as a prototype feature, not a composed or recorded soundtrack. The favicon is a small handcrafted procedural PNG; no generated gameplay model or promotional artwork was added.
 
-Apply changes preview state only. `LIVE` parameters are read in the next game update;
-`NEXT_ACTION` parameters activate at the relevant jump/dash start; `NEXT_RUN` parameters
-activate in `Game.start`. Model/collider size and gravity are not exposed by this version.
-Do not mutate the source defaults or persist Apply to localStorage. Save with Manus
-checks the snapshot against the current catalog and edits `DEFAULT_CONFIG`, then uses
-the normal Three.js Web build/checkpoint workflow. Keep existing gameplay parameter
-managers when extending an older project; do not create a competing store.
+## Verified in this project
 
-For server-authoritative multiplayer, expose local cosmetic controls only until gameplay
-parameters have explicit server-side development support. The descriptor's GAMEPLAY flag
-is a classification, not server authorization or ranked-score enforcement.
+The following checks were run against this project:
 
-The preview plugin reads the ignored `.manus-webdev/preview-identity.json` v1 projection
-written by the Runtime when initializing, attaching or restoring this project. It contains
-only the resource ID and canonical project directory; private Host bindings and starter
-receipts are not template dependencies. Missing identity disables the bridge.
-The manager latches `tuning.unranked` when non-default GAMEPLAY values become active and
-resets it only at the next run using that run's active values. `Game` snapshots this onto
-`RunState.unranked`; local results cannot save such runs. Preserve this guard when changing
-scoring. When adding online leaderboards, skip submissions for unranked runs and enforce
-eligibility in the authoritative server too; client flags are not proof of a fair score.
+- `pnpm typecheck` passed.
+- `pnpm test` passed: 68 tests across 11 test files, covering input, movement/jump, the note/noise/Rest progression, settings/save, Tweak, fixed-step timing and UI navigation.
+- `pnpm build` passed, including the prepared sharing build step. The reported bundle was 1.73 MB JavaScript gzip, 1.00 MB fonts, and 2.73 MB total measured transfer size.
+- `pnpm smoke` passed against the production build: movement through the shared input adapter, settings persistence, borrowed Sa, latch strain and recovery, Evening Minute, trace/ending and restart. It generated screenshots in `shots/`.
+- Managed Preview was opened successfully at desktop size. Browser-based verification does not test Unreal packaging or production publication.
+
+## Five best next steps
+
+1. Port this playable route to Unreal Engine 5 and create a native Windows build.
+2. Replace Hollow and key city landmarks with finished, culturally coherent production assets; retain the handcrafted Sa/strings silhouette.
+3. Extend the route with more walkable Sa, side discoveries and clearer views of all four district strings.
+4. Replace synthesized placeholders with recorded/commissioned district ambience and a restrained instrumental score.
+5. Polish character locomotion, NPC gestures, cloth/string motion, lighting and the multi-stage Fading response on target hardware.
+
+## Project notes
+
+- `src/game/` owns the playable world, Hollow, camera, game rules and Tweak settings.
+- `src/engine/` retains the fixed-step loop, Rapier physics, renderer, unified input, audio and local settings.
+- `src/ui/` and `src/styles/main.css` own the English-only menu, HUD, pause, settings and ending.
+- `assets.lock.json` tracks the managed favicon. `public/fonts/ManusCC0-LICENSE.txt` covers bundled fonts; Three.js is MIT-licensed and Rapier is Apache-2.0.
+- No user reference artwork was supplied or assumed. The Tweak development bridge remains registered only for development builds.

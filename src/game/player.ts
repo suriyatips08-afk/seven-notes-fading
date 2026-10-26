@@ -4,8 +4,8 @@ import { CONFIG } from './config'
 import { tuning } from './tuning'
 import type { MovingPlatform } from './world'
 
-export type PlayerIntent = { moveX: number; moveY: number; sprint: boolean; jumpPressed: boolean; jumpHeld: boolean; dashPressed: boolean }
-export type PlayerEvent = { type: 'jump' } | { type: 'land'; impact: number } | { type: 'dash' }
+export type PlayerIntent = { moveX: number; moveY: number; sprint: boolean; jumpPressed: boolean; jumpHeld: boolean }
+export type PlayerEvent = { type: 'jump' } | { type: 'land'; impact: number }
 
 const P = CONFIG.player
 const UP = new THREE.Vector3(0, 1, 0)
@@ -13,7 +13,7 @@ const UP = new THREE.Vector3(0, 1, 0)
 /**
  * Third-person character on Rapier's KinematicCharacterController: the controller resolves
  * collisions, slopes, steps and ground snapping; this class owns the "game feel" (acceleration,
- * coyote time, jump buffering, variable jump height, dash, moving-platform carry).
+   * coyote time, jump buffering, variable jump height and moving-platform carry).
  */
 export class Player {
   readonly root = new THREE.Group()
@@ -29,8 +29,6 @@ export class Player {
   private coyote = 0
   private jumpBuffer = 0
   private jumping = false
-  private dashTime = 0
-  private dashCooldown = 0
   private squash = 0
   private runCycle = 0
   private platform?: MovingPlatform
@@ -73,10 +71,6 @@ export class Player {
     return new THREE.Vector3(t.x, t.y, t.z)
   }
 
-  get dashing(): boolean {
-    return this.dashTime > 0
-  }
-
   /** One fixed step. `cameraYaw` makes stick/WASD movement camera-relative. */
   step(dt: number, intent: PlayerIntent, cameraYaw: number, events: PlayerEvent[]): void {
     const forward = new THREE.Vector3(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw))
@@ -87,51 +81,32 @@ export class Player {
 
     this.coyote = this.grounded ? P.coyoteTime : Math.max(0, this.coyote - dt)
     this.jumpBuffer = intent.jumpPressed ? P.jumpBuffer : Math.max(0, this.jumpBuffer - dt)
-    this.dashCooldown = Math.max(0, this.dashCooldown - dt)
-
-    // A valid jump takes priority over a dash; do not let the dash outlive its input buffer.
     const jumpReady = this.jumpBuffer > 0 && this.coyote > 0
-    if (jumpReady) this.dashTime = 0
 
-    if (intent.dashPressed && this.dashCooldown <= 0 && !jumpReady) {
-      tuning.activate('dash')
-      const dir = wishLen > 0.01 ? wish : new THREE.Vector3(-Math.sin(this.facing), 0, -Math.cos(this.facing))
-      this.facing = Math.atan2(-dir.x, -dir.z)
-      this.velocity.set(dir.x * P.dashSpeed, Math.max(this.velocity.y, 0), dir.z * P.dashSpeed)
-      this.dashTime = P.dashTime
-      this.dashCooldown = P.dashCooldown
-      events.push({ type: 'dash' })
+    const speed = (intent.sprint ? P.sprintSpeed : P.walkSpeed) * wishLen
+    const control = this.grounded ? 1 : P.airControl
+    const target = wish.clone().multiplyScalar(speed)
+    const horizontal = new THREE.Vector3(this.velocity.x, 0, this.velocity.z)
+    horizontal.lerp(target, 1 - Math.exp(-(P.acceleration / 6) * control * dt))
+    this.velocity.x = horizontal.x
+    this.velocity.z = horizontal.z
+
+    if (jumpReady) {
+      tuning.activate('jump')
+      this.velocity.y = P.jumpSpeed
+      this.jumping = true
+      this.jumpBuffer = 0
+      this.coyote = 0
+      this.grounded = false
+      this.platform = undefined
+      this.squash = -0.35
+      events.push({ type: 'jump' })
     }
+    const rising = this.velocity.y > 0
+    const gravity = rising && this.jumping && !intent.jumpHeld ? P.lowJumpGravity : P.gravity
+    this.velocity.y = Math.max(P.maxFall, this.velocity.y + gravity * dt)
 
-    if (this.dashTime > 0) {
-      this.dashTime -= dt
-      this.velocity.y = Math.max(this.velocity.y, 0)
-    } else {
-      const speed = (intent.sprint ? P.sprintSpeed : P.walkSpeed) * wishLen
-      const control = this.grounded ? 1 : P.airControl
-      const target = wish.clone().multiplyScalar(speed)
-      const horizontal = new THREE.Vector3(this.velocity.x, 0, this.velocity.z)
-      horizontal.lerp(target, 1 - Math.exp(-(P.acceleration / 6) * control * dt))
-      this.velocity.x = horizontal.x
-      this.velocity.z = horizontal.z
-
-      if (jumpReady) {
-        tuning.activate('jump')
-        this.velocity.y = P.jumpSpeed
-        this.jumping = true
-        this.jumpBuffer = 0
-        this.coyote = 0
-        this.grounded = false
-        this.platform = undefined
-        this.squash = -0.35
-        events.push({ type: 'jump' })
-      }
-      const rising = this.velocity.y > 0
-      const gravity = rising && this.jumping && !intent.jumpHeld ? P.lowJumpGravity : P.gravity
-      this.velocity.y = Math.max(P.maxFall, this.velocity.y + gravity * dt)
-    }
-
-    if (wishLen > 0.1 && this.dashTime <= 0) {
+    if (wishLen > 0.1) {
       const targetYaw = Math.atan2(-wish.x, -wish.z)
       this.facing = dampAngle(this.facing, targetYaw, P.turnSpeed, dt)
     }
@@ -143,7 +118,7 @@ export class Player {
     const wasGrounded = this.grounded
     this.grounded = this.controller.computedGrounded()
 
-    // Bumped a ceiling: stop rising. Hit a wall mid-dash: end the dash.
+    // Bumped a ceiling: stop rising.
     if (this.velocity.y > 0 && moved.y < desired.y - 1e-3) this.velocity.y = 0
     if (this.grounded) {
       if (!wasGrounded && this.velocity.y < -6) {
@@ -182,7 +157,6 @@ export class Player {
     this.body.setNextKinematicTranslation(to)
     this.velocity.set(0, 0, 0)
     this.platform = undefined
-    this.dashTime = 0
     this.root.position.copy(to)
     this.physics.snap(this.body)
   }
@@ -193,7 +167,6 @@ export class Player {
     if (away.lengthSq() < 1e-4) away.set(1, 0, 0)
     away.normalize().multiplyScalar(9)
     this.velocity.set(away.x, 7, away.z)
-    this.dashTime = 0
     this.grounded = false
     this.platform = undefined
   }
@@ -209,9 +182,9 @@ export class Player {
     if (this.grounded && speed > 0.5) this.runCycle += frameSeconds * speed * 1.6
     const bob = this.grounded ? Math.abs(Math.sin(this.runCycle)) * 0.08 * Math.min(1, speed / 6) : 0
     this.model.position.y = bob
-    this.model.rotation.x = -Math.min(0.28, speed / 40) * (this.dashing ? 1.6 : 1)
+    this.model.rotation.x = -Math.min(0.2, speed / 55)
     this.model.visible = !invulnerable || Math.floor(time * 16) % 2 === 0
-    ;(this.eyes.material as THREE.MeshStandardMaterial).emissiveIntensity = this.dashing ? 4 : 2.2
+    ;(this.eyes.material as THREE.MeshStandardMaterial).emissiveIntensity = 0
 
     // Blob shadow: always-on depth cue for platforming, even with real shadows disabled.
     if (ground === null) {
@@ -228,45 +201,78 @@ export class Player {
   }
 
   private buildModel(): THREE.Mesh {
-    const shell = new THREE.MeshStandardMaterial({ color: '#f4f1ea', roughness: 0.45, metalness: 0.05 })
-    const accent = new THREE.MeshStandardMaterial({ color: '#ff7a45', roughness: 0.5 })
-    const dark = new THREE.MeshStandardMaterial({ color: '#23213a', roughness: 0.3, metalness: 0.2 })
-    const eyes = new THREE.MeshStandardMaterial({ color: '#7ef9ff', emissive: '#7ef9ff', emissiveIntensity: 2.2 })
-
-    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.36, 0.36, 6, 16), shell)
-    torso.position.y = -0.3
-    const belt = new THREE.Mesh(new THREE.TorusGeometry(0.37, 0.06, 8, 24), accent)
-    belt.rotation.x = Math.PI / 2
-    belt.position.y = -0.36
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 24, 16), shell)
-    head.position.y = 0.42
-    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 12, Math.PI * 0.6, Math.PI * 0.8, Math.PI * 0.3, Math.PI * 0.38), dark)
-    visor.position.set(0, 0.42, -0.07)
-    visor.rotation.y = Math.PI
-    const eyeGeo = new THREE.CapsuleGeometry(0.045, 0.08, 4, 8)
-    const eyeL = new THREE.Mesh(eyeGeo, eyes)
-    const eyeR = new THREE.Mesh(eyeGeo, eyes)
-    eyeL.position.set(-0.12, 0.44, -0.36)
-    eyeR.position.set(0.12, 0.44, -0.36)
-    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.28, 6), dark)
-    antenna.position.set(0.14, 0.9, 0.04)
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), new THREE.MeshStandardMaterial({ color: '#ff7a45', emissive: '#ff7a45', emissiveIntensity: 1.2 }))
-    tip.position.set(0.14, 1.06, 0.04)
-    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.44, 0.2), accent)
-    pack.position.set(0, -0.2, 0.36)
-    const footGeo = new THREE.SphereGeometry(0.16, 12, 8)
-    const footL = new THREE.Mesh(footGeo, dark)
-    const footR = new THREE.Mesh(footGeo, dark)
-    footL.scale.set(1, 0.6, 1.3)
-    footR.scale.set(1, 0.6, 1.3)
-    footL.position.set(-0.17, -0.84, -0.04)
-    footR.position.set(0.17, -0.84, -0.04)
-
-    for (const m of [torso, belt, head, visor, antenna, tip, pack, footL, footR, eyeL, eyeR]) {
-      m.castShadow = true
-      this.model.add(m)
+    // Procedural stand-in: a human adolescent silhouette in repaired, layered street clothing.
+    // It intentionally avoids the starter robot's visor, antenna, emissive eyes and bright trim.
+    const skin = new THREE.MeshStandardMaterial({ color: '#a98267', roughness: 0.84 })
+    const robe = new THREE.MeshStandardMaterial({ color: '#39352f', roughness: 0.94 })
+    const under = new THREE.MeshStandardMaterial({ color: '#c1b49b', roughness: 0.93 })
+    const hair = new THREE.MeshStandardMaterial({ color: '#201e1b', roughness: 0.92 })
+    const bronze = new THREE.MeshStandardMaterial({ color: '#8e7650', roughness: 0.65, metalness: 0.22 })
+    const dark = new THREE.MeshStandardMaterial({ color: '#261f19', roughness: 0.72 })
+    const eyes = new THREE.MeshStandardMaterial({ color: '#2c211b', roughness: 0.75 })
+    const add = (mesh: THREE.Mesh, x: number, y: number, z: number, sx = 1, sy = 1, sz = 1) => {
+      mesh.position.set(x, y, z); mesh.scale.set(sx, sy, sz); mesh.castShadow = true; this.model.add(mesh); return mesh
     }
-    return eyeL
+
+    const tunic = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 0.68, 5, 10), robe)
+    add(tunic, 0, -0.22, 0, 1.08, 1.06, 0.78)
+    const front = new THREE.Mesh(new THREE.ConeGeometry(0.37, 0.9, 5), under)
+    front.rotation.y = Math.PI / 5
+    add(front, 0, -0.48, -0.245, 0.72, 0.92, 0.32)
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.07, 7, 24), under)
+    collar.rotation.x = Math.PI / 2
+    add(collar, 0, 0.11, 0)
+    const sash = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.035, 6, 24), bronze)
+    sash.rotation.x = Math.PI / 2; sash.rotation.z = -0.16
+    add(sash, 0, -0.3, 0)
+
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.13, 0.22, 9), skin)
+    add(neck, 0, 0.28, -0.01)
+    const face = new THREE.Mesh(new THREE.SphereGeometry(0.285, 20, 16), skin)
+    add(face, 0, 0.57, -0.03, 0.88, 1.12, 0.88)
+    const jaw = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.32, 7), skin)
+    jaw.rotation.x = Math.PI
+    add(jaw, 0, 0.43, -0.035, 0.92, 0.72, 0.9)
+    for (const side of [-1, 1]) {
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), skin)
+      add(ear, side * 0.25, 0.56, -0.005, 0.62, 1.1, 0.72)
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.037, 10, 8), eyes)
+      add(eye, side * 0.095, 0.6, -0.265, 1.25, 0.72, 0.5)
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.025, 0.025), hair)
+      brow.rotation.z = side * -0.08
+      add(brow, side * 0.095, 0.66, -0.265)
+    }
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), skin)
+    add(nose, 0, 0.535, -0.3, 0.64, 0.72, 0.95)
+
+    const haircap = new THREE.Mesh(new THREE.SphereGeometry(0.3, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.57), hair)
+    add(haircap, 0, 0.68, -0.015, 1.06, 0.88, 1.02)
+    for (const [x, y, z, scale] of [[-0.18, 0.73, -0.05, 0.72], [0.17, 0.76, -0.02, 0.68], [-0.03, 0.81, 0.06, 0.65]] as const) {
+      const curl = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), hair)
+      add(curl, x, y, z, scale, 0.65, scale)
+    }
+    const curlCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.08, 0.79, -0.2), new THREE.Vector3(0.2, 0.85, -0.16),
+      new THREE.Vector3(0.28, 0.73, -0.12), new THREE.Vector3(0.2, 0.68, -0.18),
+    ])
+    const stray = new THREE.Mesh(new THREE.TubeGeometry(curlCurve, 12, 0.055, 6, false), hair)
+    this.model.add(stray); stray.castShadow = true
+
+    for (const side of [-1, 1]) {
+      const sleeve = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.42, 4, 8), robe)
+      sleeve.rotation.z = side * -0.18
+      add(sleeve, side * 0.39, -0.18, 0.005, 1, 1, 0.95)
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), skin)
+      add(hand, side * 0.42, -0.47, -0.015, 0.8, 1, 0.8)
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.13, 0.38, 8), under)
+      add(leg, side * 0.14, -0.77, 0)
+      const sandal = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.08, 0.32), dark)
+      add(sandal, side * 0.14, -0.96, -0.055)
+    }
+    // One small worn brass token, not a glowing rune or magic resource.
+    const token = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.018, 5, 14), bronze)
+    token.position.set(0.06, -0.05, -0.31); this.model.add(token)
+    return this.model.children.find(c => (c as THREE.Mesh).isMesh && (c as THREE.Mesh).material === eyes) as THREE.Mesh
   }
 }
 

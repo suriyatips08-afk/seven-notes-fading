@@ -11,6 +11,7 @@ export type SaveData = {
   version: 1
   /** '' = never chosen; the game follows the browser language until the player picks one. */
   locale: Locale | ''
+  masterVolume: number
   musicVolume: number
   sfxVolume: number
   muted: boolean
@@ -30,6 +31,7 @@ export function defaultSave(): SaveData {
   return {
     version: 1,
     locale: '',
+    masterVolume: 0.8,
     musicVolume: 0.7,
     sfxVolume: 0.8,
     muted: false,
@@ -62,6 +64,7 @@ export function parseSave(raw: string | null): SaveData {
   return {
     version: 1,
     locale: data.locale === 'en' || data.locale === 'zh-CN' ? data.locale : '',
+    masterVolume: clamp01(data.masterVolume, base.masterVolume),
     musicVolume: clamp01(data.musicVolume, base.musicVolume),
     sfxVolume: clamp01(data.sfxVolume, base.sfxVolume),
     muted: data.muted === true,
