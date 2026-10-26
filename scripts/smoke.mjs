@@ -47,10 +47,15 @@ const state = page => page.evaluate(() => {
 })
 const settle = ms => new Promise(resolve => setTimeout(resolve, ms))
 async function pressAction(page, action) {
-  await page.evaluate(action => window.__game.input.setTouchButton(action, true), action)
-  await page.waitForTimeout(240)
-  await page.evaluate(action => window.__game.input.setTouchButton(action, false), action)
-  await page.waitForTimeout(160)
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await page.evaluate(action => window.__game.input.setTouchButton(action, true), action)
+    await page.waitForTimeout(300)
+    const pending = await page.evaluate(action => window.__game.input.pressed(action), action)
+    await page.evaluate(action => window.__game.input.setTouchButton(action, false), action)
+    if (!pending) { await page.waitForTimeout(160); return }
+    await page.waitForTimeout(180)
+  }
+  throw new Error(`the ${action} edge was not consumed by the game loop`)
 }
 
 try {
