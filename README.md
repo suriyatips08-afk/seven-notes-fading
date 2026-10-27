@@ -19,7 +19,7 @@ pnpm build     # managed-asset restore, sharing metadata, typecheck and producti
 pnpm smoke     # headless browser playthrough; screenshots go to shots/
 ```
 
-The smoke test needs Playwright and a local Chromium executable. The built favicon is registered at `assets/share/favicon.png`; the title and short description are in `game-sharing.json`. This quick prototype has no promotional OG cover. The public repository is [on GitHub](https://github.com/suriyatips08-afk/seven-notes-fading). GitHub Pages now publishes the separate illustrated narrative website from `site/` at [SEVEN NOTES: FADING](https://suriyatips08-afk.github.io/seven-notes-fading/); the playable game source remains in this repository but is not the Pages artifact.
+The smoke test needs Playwright and a local Chromium executable. The built favicon is registered at `assets/share/favicon.png`; the title and short description are in `game-sharing.json`. This quick prototype has no promotional OG cover. The public game is deployed at [Seven Notes: Fading](https://suriyatips08-afk.github.io/seven-notes-fading/), and its public source is at [GitHub](https://github.com/suriyatips08-afk/seven-notes-fading). `.github/workflows/pages.yml` rebuilds and deploys the static site on pushes to `main`.
 
 ## Controls
 
